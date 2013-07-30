@@ -52,14 +52,14 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 func assertHandler(w http.ResponseWriter, r *http.Request) {
     abc <- 1
-    log.Printf("%s ASSERT",hostname)
+    log.Printf("%s ASSERT %s",hostname, r.URL)
     w.Header().Set("Content-Type", "application/json")
       fmt.Fprintf(w, "%s", "{\"error\" : \"assert not understood\"}")
 }
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
     qbc <- 1
-    log.Printf("%s QUERY",hostname)
+    log.Printf("%s QUERY %s ",hostname, r.URL)
     w.Header().Set("Content-Type", "application/json")
       fmt.Fprintf(w, "%s", "{\"error\" : \"query not understood\"}")
 }
