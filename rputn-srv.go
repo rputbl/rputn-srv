@@ -4,16 +4,16 @@ package main
 import (
     "runtime"
     "fmt"
+    "encoding/base64"
+//    "encoding/hex"
     "bytes"
+    "strings"
     "os/exec"
     "os"
     "net/http"
     "io/ioutil"
     "log"
     "time"
-//    "code.google.com/p/go.net/websocket"
-//    "kuracali.com/sessions"
-//    "kuracali.com/clients"
 )
 
 
@@ -52,16 +52,94 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 func assertHandler(w http.ResponseWriter, r *http.Request) {
     abc <- 1
-    log.Printf("%s ASSERT %s",hostname, r.URL)
     w.Header().Set("Content-Type", "application/json")
-      fmt.Fprintf(w, "%s", "{\"error\" : \"assert not understood\"}")
+    sep:=strings.IndexRune(r.URL.String(),'&')
+    if sep < 28 {
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
+      log.Printf("%s BADASSERT-ASSERT-PARSE %s ",hostname, r.URL.String()[3:])
+    }else{
+      hash64val := r.URL.String()[3:sep]
+      afterhash := r.URL.String()[sep+1:]
+      sep2:=strings.IndexRune(afterhash,'&')
+
+      if sep2 < 1 {
+        fmt.Fprintf(w, "%s", "{\"error\" : \"missing assert or signature\"}")
+        log.Printf("%s BADASSERT-ASSERT-AORSIG %s ",hostname, r.URL.String()[3:])
+      }else{
+
+        hbv, err := base64.StdEncoding.DecodeString(hash64val)
+        if err != nil {
+          fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
+          log.Printf("%s BADASSERT-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
+        }else{
+          if len(hbv)!=28{
+            fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
+            log.Printf("%s BADASSERT-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
+          }else{
+
+            fmt.Fprintf(w, "%s", "{\"ok\" : \"query understood\"}")
+	    m[hash64val]=afterhash[:sep2]
+            log.Printf("%s ASSERT %s %s",hostname, hash64val, afterhash[:sep2])
+          }
+        }
+      }
+    }
 }
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
     qbc <- 1
-    log.Printf("%s QUERY %s ",hostname, r.URL)
     w.Header().Set("Content-Type", "application/json")
-      fmt.Fprintf(w, "%s", "{\"error\" : \"query not understood\"}")
+    hash64val := r.URL.String()[3:]
+    hbv, err := base64.StdEncoding.DecodeString(hash64val)
+    if err != nil {
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
+      log.Printf("%s BADQUERY-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
+    }else{
+      if len(hbv)!=28{
+        fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
+        log.Printf("%s BADQUERY-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
+      }else{
+	assert,exists:=m[hash64val]
+	if exists {
+          fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"asserted\" : \"",assert,"\"}")
+          log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
+	}else{
+          fmt.Fprintf(w, "%s", "{\"ok\" : \"no such hash\"}")
+          log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
+	}
+      }
+    }
+
+    
+
+}
+
+func introHandler(w http.ResponseWriter, r *http.Request) {
+    qbc <- 1
+    w.Header().Set("Content-Type", "application/json")
+    hash64val := r.URL.String()[3:]
+    hbv, err := base64.StdEncoding.DecodeString(hash64val)
+    if err != nil {
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
+      log.Printf("%s BADQUERY-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
+    }else{
+      if len(hbv)!=28{
+        fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
+        log.Printf("%s BADQUERY-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
+      }else{
+	assert,exists:=m[hash64val]
+	if exists {
+          fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"asserted\" : \"",assert,"\"}")
+          log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
+	}else{
+          fmt.Fprintf(w, "%s", "{\"ok\" : \"no such hash\"}")
+          log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
+	}
+      }
+    }
+
+    
+
 }
 
 func ieCssHandler(w http.ResponseWriter, r *http.Request) {
@@ -297,8 +375,11 @@ func rmrcv(){
 	}
 }
 
+var m map[string]string
 
 func main() {
+
+	m = make(map[string]string)
 	
 	getHostname()
 	go housekeeping()
@@ -333,6 +414,8 @@ func main() {
 	http.HandleFunc("/a", assertHandler)
 
 	http.HandleFunc("/q", queryHandler)
+
+	http.HandleFunc("/i", introHandler)
 
 	http.HandleFunc("/ie.css", ieCssHandler)
 	http.HandleFunc("/print.css", printCssHandler)
