@@ -352,7 +352,7 @@ func arcv(){
 	var v int
 	for ;; {
 		v = <- ac
-		hb.Assertions[0]=hb.Assertions[0]+v
+		hb.Assertions=hb.Assertions+uint32(v)
 	}
 }
 func qgrcv(){
