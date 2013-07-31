@@ -51,10 +51,10 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func assertHandler(w http.ResponseWriter, r *http.Request) {
-    abc <- 1
     w.Header().Set("Content-Type", "application/json")
     sep:=strings.IndexRune(r.URL.String(),'&')
     if sep < 28 {
+      abc <- 1
       fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
       log.Printf("%s BADASSERT-ASSERT-PARSE %s ",hostname, r.URL.String()[3:])
     }else{
@@ -63,20 +63,24 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
       sep2:=strings.IndexRune(afterhash,'&')
 
       if sep2 < 1 {
+        abc <- 1
         fmt.Fprintf(w, "%s", "{\"error\" : \"missing assert or signature\"}")
         log.Printf("%s BADASSERT-ASSERT-AORSIG %s ",hostname, r.URL.String()[3:])
       }else{
 
         hbv, err := base64.StdEncoding.DecodeString(hash64val)
         if err != nil {
+          abc <- 1
           fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
           log.Printf("%s BADASSERT-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
         }else{
           if len(hbv)!=28{
+            abc <- 1
             fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
             log.Printf("%s BADASSERT-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
           }else{
 
+            agc <- 1
             fmt.Fprintf(w, "%s", "{\"ok\" : \"query understood\"}")
 	    m[hash64val]=afterhash[:sep2]
             log.Printf("%s ASSERT %s %s",hostname, hash64val, afterhash[:sep2])
@@ -87,23 +91,26 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
-    qbc <- 1
     w.Header().Set("Content-Type", "application/json")
     hash64val := r.URL.String()[3:]
     hbv, err := base64.StdEncoding.DecodeString(hash64val)
     if err != nil {
+      qbc <- 1
       fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
       log.Printf("%s BADQUERY-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
     }else{
       if len(hbv)!=28{
+        qbc <- 1
         fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
         log.Printf("%s BADQUERY-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
       }else{
 	assert,exists:=m[hash64val]
 	if exists {
+          qgc <- 1
           fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"asserted\" : \"",assert,"\"}")
           log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
 	}else{
+          qgc <- 1
           fmt.Fprintf(w, "%s", "{\"ok\" : \"no such hash\"}")
           log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
 	}
