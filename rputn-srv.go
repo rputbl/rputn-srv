@@ -81,6 +81,7 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
           }else{
 
             agc <- 1
+	    ac <- 1
             fmt.Fprintf(w, "%s", "{\"ok\" : \"query understood\"}")
 	    m[hash64val]=afterhash[:sep2]
             log.Printf("%s ASSERT %s %s",hostname, hash64val, afterhash[:sep2])
@@ -339,6 +340,7 @@ func housekeeping() {
     }
 }
 
+var ac chan int
 var qgc chan int
 var agc chan int
 var qbc chan int
@@ -346,6 +348,13 @@ var abc chan int
 var rmc chan int
 
 
+func arcv(){
+	var v int
+	for ;; {
+		v = <- ac
+		hb.Assertions[0]=hb.Assertions[0]+v
+	}
+}
 func qgrcv(){
 	var v int
 	for ;; {
@@ -404,12 +413,14 @@ func main() {
 	hb.Memuse = 0
 	hb.Netuse = 0
 
+	ac = make(chan int)
 	qgc = make(chan int)
 	agc = make(chan int)
 	qbc = make(chan int)
 	abc = make(chan int)
 	rmc = make(chan int)
 
+	go arcv()
 	go qgrcv()
 	go agrcv()
 	go qbrcv()
