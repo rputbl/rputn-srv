@@ -4,6 +4,7 @@ package main
 import (
     "runtime"
     "fmt"
+    "net/url"
     "encoding/base64"
 //    "encoding/hex"
     "bytes"
@@ -42,53 +43,104 @@ func reply2request(req string) string{
 
 
 
-
-
 func rootHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("%s GET-HTML",hostname)
     w.Header().Set("Content-Type", "text/html")
     fmt.Fprintf(w, "%s", pwdfile("rputbl.html"))
 }
 
+func isAmpersand(r rune) bool{
+	if r=='&' {return true}
+	return false
+}
+
+func isSpace(r rune) bool{
+	if r==' ' {return true}
+	return false
+}
+
 func assertHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
-    sep:=strings.IndexRune(r.URL.String(),'&')
-    if sep < 28 {
-      abc <- 1
-      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
-      log.Printf("%s BADASSERT-ASSERT-PARSE %s ",hostname, r.URL.String()[3:])
-    }else{
-      hash64val := r.URL.String()[3:sep]
-      afterhash := r.URL.String()[sep+1:]
-      sep2:=strings.IndexRune(afterhash,'&')
 
-      if sep2 < 1 {
-        abc <- 1
-        fmt.Fprintf(w, "%s", "{\"error\" : \"missing assert or signature\"}")
-        log.Printf("%s BADASSERT-ASSERT-AORSIG %s ",hostname, r.URL.String()[3:])
-      }else{
-
-        hbv, err := base64.StdEncoding.DecodeString(hash64val)
-        if err != nil {
-          abc <- 1
-          fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
-          log.Printf("%s BADASSERT-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
-        }else{
-          if len(hbv)!=28{
-            abc <- 1
-            fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
-            log.Printf("%s BADASSERT-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
-          }else{
-
-            agc <- 1
-	    ac <- 1
-            fmt.Fprintf(w, "%s", "{\"ok\" : \"query understood\"}")
-	    m[hash64val]=afterhash[:sep2]
-            log.Printf("%s ASSERT %s %s",hostname, hash64val, afterhash[:sep2])
-          }
-        }
-      }
+    if len(r.URL.String())<4 {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed query (too small)\"}")
+      log.Printf("%s BADASSERT-QUERY-FORMAT %s ",hostname, r.URL.String())
+      return
     }
+
+    qline:=r.URL.String()[3:]
+
+    qFields:=strings.FieldsFunc(qline,isAmpersand)
+
+    if len(qFields)<4 {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed query (too few fields)\"}")
+      log.Printf("%s BADASSERT-QUERY-FORMAT %s ",hostname, r.URL.String())
+      return
+    }
+
+
+    fh64val := qFields[0]
+    fhbv, err := base64.StdEncoding.DecodeString(fh64val)
+    if err != nil {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed file hash\"}")
+      log.Printf("%s BADASSERT-BASE64-DECODE %s ",hostname, qline)
+      return
+    }
+    if len(fhbv)!=28 {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) file hash\"}")
+      log.Printf("%s BADASSERT-SHA224-SIZE %s ",hostname, qline)
+      return
+    }
+
+    ph64val := qFields[1]
+    phbv, err := base64.StdEncoding.DecodeString(ph64val)
+    if err != nil {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed asserter hash\"}")
+      log.Printf("%s BADASSERT-BASE64-DECODE %s ",hostname, qline)
+      return
+    }
+    if len(phbv)!=28 {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) asserter hash\"}")
+      log.Printf("%s BADASSERT-SHA224-SIZE %s ",hostname, qline)
+      return
+    }
+
+    assertstr := qFields[2]
+    if len(assertstr) <1 {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed assert content\"}")
+      log.Printf("%s BADASSERT-ASSERT-FORMAT %s ",hostname, qline)
+      return
+    }
+
+    sigstr := qFields[3]
+    if len(sigstr) <1 {
+      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed signature content\"}")
+      log.Printf("%s BADASSERT-SIGNATURE-FORMAT %s ",hostname, qline)
+      return
+    }
+    cmc <- CM{ i: CAssertGood, n:1 }
+
+    _,exists:=i[ph64val]
+    if ! exists {
+      fmt.Fprintf(w, "%s", "{\"error\" : \"unknown asserter\"}")
+      log.Printf("%s DENIEDASSERT-UNKNOWN-ASSERTER %s ",hostname, qline)
+      return
+    }
+
+            cmc <- CM{ i:CAssertion, n:1 }
+            fmt.Fprintf(w, "%s", "{\"ok\" : \"query understood\"}")
+
+	    m[fh64val]=assertstr
+            log.Printf("%s ASSERT %s by %s is %s",hostname, fh64val, ph64val, assertstr)
+
 }
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
@@ -96,22 +148,22 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
     hash64val := r.URL.String()[3:]
     hbv, err := base64.StdEncoding.DecodeString(hash64val)
     if err != nil {
-      qbc <- 1
+      cmc <- CM{ i: CQueryBad, n:1 }
       fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
       log.Printf("%s BADQUERY-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
     }else{
       if len(hbv)!=28{
-        qbc <- 1
+        cmc <- CM{ i: CQueryBad, n:1 }
         fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
         log.Printf("%s BADQUERY-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
       }else{
 	assert,exists:=m[hash64val]
 	if exists {
-          qgc <- 1
+          cmc <- CM{ i: CQueryGood, n:1 }
           fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"asserted\" : \"",assert,"\"}")
           log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
 	}else{
-          qgc <- 1
+          cmc <- CM{ i: CQueryGood, n:1 }
           fmt.Fprintf(w, "%s", "{\"ok\" : \"no such hash\"}")
           log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
 	}
@@ -122,29 +174,94 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+
 func introHandler(w http.ResponseWriter, r *http.Request) {
-    qbc <- 1
     w.Header().Set("Content-Type", "application/json")
-    hash64val := r.URL.String()[3:]
-    hbv, err := base64.StdEncoding.DecodeString(hash64val)
-    if err != nil {
-      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
-      log.Printf("%s BADQUERY-BASE64-DECODE %s ",hostname, r.URL.String()[3:])
-    }else{
-      if len(hbv)!=28{
-        fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
-        log.Printf("%s BADQUERY-SHA224-SIZE %s ",hostname, r.URL.String()[3:])
-      }else{
-	assert,exists:=m[hash64val]
-	if exists {
-          fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"asserted\" : \"",assert,"\"}")
-          log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
-	}else{
-          fmt.Fprintf(w, "%s", "{\"ok\" : \"no such hash\"}")
-          log.Printf("%s QUERY %s ",hostname, r.URL.String()[3:])
-	}
-      }
+
+
+//    log.Printf("DEBUG-YEEK")
+//    fmt.Fprintf(w, "%s", "{\"debug\" : \"YEEK\"}")
+
+    if len(r.URL.String())<4 {
+//      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed query (too small)\"}")
+      log.Printf("%s BADINTRO-QUERY-FORMAT %s ",hostname, r.URL.String())
+      return
     }
+
+    qline:=r.URL.String()[3:]
+
+    qFields:=strings.FieldsFunc(qline,isAmpersand)
+
+    if len(qFields)<2 {
+//      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed query (too few fields)\"}")
+      log.Printf("%s BADINTRO-QUERY-FORMAT %s ",hostname, r.URL.String())
+      return
+    }
+
+
+    ph64val := qFields[0]
+    phbv, err := base64.StdEncoding.DecodeString(ph64val)
+    if err != nil {
+//      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed file hash\"}")
+      log.Printf("%s BADINTRO-BASE64-DECODE %s ",hostname, qline)
+      return
+    }
+    if len(phbv)!=28 {
+//      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) public key hash\"}")
+      log.Printf("%s BADINTRO-SHA224-SIZE %s ",hostname, qline)
+      return
+    }
+
+    rsa_pub, err := url.QueryUnescape(qFields[1])
+    if err != nil {
+//      cmc <- CM{ i: CAssertBad, n:1 }
+      fmt.Fprintf(w, "%s", "{\"error\" : \"malformed escaped pubkey\"}")
+      log.Printf("%s BADINTRO-PUBKEY-UNESCAPE %s ",hostname, qline)
+      return
+    }
+
+
+
+	rsa_pub_stored,exists:=i[ph64val]
+
+
+
+	if exists {
+
+	  lspi := strings.LastIndex(rsa_pub_stored," ")
+          if lspi < 1 {
+//            cmc <- CM{ i: CAssertBad, n:1 }
+            fmt.Fprintf(w, "%s", "{\"error\" : \"malformed stored user record\"}")
+            log.Printf("%s BADINTRO-STOREDKEY-DECODE %s ",hostname, qline)
+            return
+          }
+ 
+          rsa_pub_name:=strings.Trim(rsa_pub_stored[lspi+1:]," \n")
+
+
+          fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"remembered\" : \"",rsa_pub_name,"\"}")
+          log.Printf("%s INTRO-ALREADY %s ",hostname, rsa_pub_name)
+	}else{
+	  lspi := strings.LastIndex(rsa_pub," ")
+          if lspi < 1 {
+//            cmc <- CM{ i: CAssertBad, n:1 }
+            fmt.Fprintf(w, "%s", "{\"error\" : \"malformed stored user record\"}")
+            log.Printf("%s BADINTRO-STOREDKEY-DECODE %s ",hostname, qline)
+            return
+          }
+ 
+          rsa_pub_name:=strings.Trim(rsa_pub[lspi+1:]," \n")
+
+          cmc <- CM{ i: CIntroduction, n:1 }
+	  i[ph64val]=rsa_pub
+
+          fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"introduced\" : \"",rsa_pub_name,"\"}")
+          log.Printf("%s INTRO-NEW %s ",hostname, rsa_pub_name)
+	}
 
     
 
@@ -210,6 +327,7 @@ type HBstats struct {
 	Hostname [32]byte
 	Pid int
 	Assertions uint32
+	Identities uint32
 	Hashcap uint32
 	Hashload uint32
 	Disksize uint32
@@ -249,6 +367,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,"\"hostname\" : \"%s\",",hostname)
 	fmt.Fprintf(w,"\"pid\" : \"%d\",",hb.Pid)
 	fmt.Fprintf(w,"\"assertions\" : \"%d\",",hb.Assertions)
+	fmt.Fprintf(w,"\"identities\" : \"%d\",",hb.Identities)
 	fmt.Fprintf(w,"\"hashcap\" : \"%d\",",hb.Hashcap)
 	fmt.Fprintf(w,"\"hashload\" : \"%d\",",hb.Hashload)
 	fmt.Fprintf(w,"\"disksize\" : \"%d\",",hb.Disksize)
@@ -340,68 +459,69 @@ func housekeeping() {
     }
 }
 
-var ac chan int
+
+type CM struct {
+	i int
+	n int
+}
+
+var cmc chan CM
+
 var qgc chan int
 var agc chan int
 var qbc chan int
 var abc chan int
 var rmc chan int
 
+const (
+  CAssertion = iota
+  CIntroduction
+  CQueryGood
+  CQueryBad
+  CAssertGood
+  CAssertBad
+  CResponseMs
+)
 
-func arcv(){
-	var v int
+func cmrecord(){
+	var cm CM
 	for ;; {
-		v = <- ac
-		hb.Assertions=hb.Assertions+uint32(v)
+		cm = <- cmc
+		switch cm.i{
+		case CAssertion:                         
+		  hb.Assertions=hb.Assertions+uint32(cm.n)
+		case CIntroduction:                         
+		  hb.Identities=hb.Identities+uint32(cm.n)
+		case CQueryGood:                         
+		  hb.Qgsec[0]=hb.Qgsec[0]+cm.n
+		case CQueryBad:                         
+		  hb.Qbsec[0]=hb.Qbsec[0]+cm.n
+		case CAssertGood:                         
+		  hb.Agsec[0]=hb.Agsec[0]+cm.n
+		case CAssertBad:                         
+		  hb.Absec[0]=hb.Absec[0]+cm.n
+		case CResponseMs:                         
+		  hb.Respms[0]=hb.Respms[0]+cm.n
+		}
 	}
 }
-func qgrcv(){
-	var v int
-	for ;; {
-		v = <- qgc
-		hb.Qgsec[0]=hb.Qgsec[0]+v
-	}
-}
-func agrcv(){
-	var v int
-	for ;; {
-		v = <- agc
-		hb.Agsec[0]=hb.Agsec[0]+v
-	}
-}
-func qbrcv(){
-	var v int
-	for ;; {
-		v = <- qbc
-		hb.Qbsec[0]=hb.Qbsec[0]+v
-	}
-}
-func abrcv(){
-	var v int
-	for ;; {
-		v = <- abc
-		hb.Absec[0]=hb.Absec[0]+v
-	}
-}
-func rmrcv(){
-	var v int
-	for ;; {
-		v = <- rmc
-		hb.Respms[0]=hb.Respms[0]+v
-	}
-}
+
+
 
 var m map[string]string
+var i map[string]string
 
 func main() {
 
 	m = make(map[string]string)
+	i = make(map[string]string)
 	
 	getHostname()
 	go housekeeping()
 
 	hb.Pid = os.Getpid()
 	hb.Assertions = 0
+	hb.Identities = 0
 	hb.Hashcap = 0
 	hb.Hashload = 0
 	hb.Disksize = 0
@@ -413,26 +533,15 @@ func main() {
 	hb.Memuse = 0
 	hb.Netuse = 0
 
-	ac = make(chan int)
-	qgc = make(chan int)
-	agc = make(chan int)
-	qbc = make(chan int)
-	abc = make(chan int)
-	rmc = make(chan int)
+	cmc = make(chan CM)
 
-	go arcv()
-	go qgrcv()
-	go agrcv()
-	go qbrcv()
-	go abrcv()
-	go rmrcv()
+
+	go cmrecord()
+
 
 	http.HandleFunc("/", rootHandler)
-
 	http.HandleFunc("/a", assertHandler)
-
 	http.HandleFunc("/q", queryHandler)
-
 	http.HandleFunc("/i", introHandler)
 
 	http.HandleFunc("/ie.css", ieCssHandler)
