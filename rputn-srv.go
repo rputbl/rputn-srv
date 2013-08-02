@@ -26,11 +26,9 @@
 package main
 
 import (
-	"encoding/base64"
-	"fmt"
+]	"fmt"
 	"net/url"
 	"runtime"
-	//    "encoding/hex"
 	"bytes"
 	"io/ioutil"
 	"log"
@@ -39,6 +37,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+        "rputbl.com/hashbase"
 )
 
 var hostname []byte
@@ -100,7 +100,7 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fh64val := qFields[0]
-	fhbv, err := base64.StdEncoding.DecodeString(fh64val)
+	fhbv, err := hashbase.Un64(fh64val)
 	if err != nil {
 		cmc <- CM{i: CAssertBad, n: 1}
 		fmt.Fprintf(w, "%s", "{\"error\" : \"malformed file hash\"}")
@@ -115,7 +115,7 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ph64val := qFields[1]
-	phbv, err := base64.StdEncoding.DecodeString(ph64val)
+	phbv, err := hashbase.Un64(ph64val)
 	if err != nil {
 		cmc <- CM{i: CAssertBad, n: 1}
 		fmt.Fprintf(w, "%s", "{\"error\" : \"malformed asserter hash\"}")
@@ -164,7 +164,7 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	hash64val := r.URL.String()[3:]
-	hbv, err := base64.StdEncoding.DecodeString(hash64val)
+	hbv, err := hashbase.Un64(hash64val)
 	if err != nil {
 		cmc <- CM{i: CQueryBad, n: 1}
 		fmt.Fprintf(w, "%s", "{\"error\" : \"malformed base64 encoding\"}")
@@ -215,7 +215,7 @@ func introHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ph64val := qFields[0]
-	phbv, err := base64.StdEncoding.DecodeString(ph64val)
+	phbv, err := hashbase.Un64(ph64val)
 	if err != nil {
 		//      cmc <- CM{ i: CAssertBad, n:1 }
 		fmt.Fprintf(w, "%s", "{\"error\" : \"malformed file hash\"}")
