@@ -26,7 +26,7 @@
 package main
 
 import (
-]	"fmt"
+	"fmt"
 	"net/url"
 	"runtime"
 	"bytes"
