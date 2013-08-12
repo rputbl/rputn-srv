@@ -44,6 +44,8 @@ import (
 var hostname []byte
 var hb HBstats
 
+var mstore hashbase.HashPersister
+
 func pwdfile(f string) string {
 	out := "File Read Error"
 	content, err := ioutil.ReadFile(f)
@@ -146,17 +148,16 @@ func assertHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	cmc <- CM{i: CAssertGood, n: 1}
 
-	_, exists := i[ph64val]
-	if !exists {
-		fmt.Fprintf(w, "%s", "{\"error\" : \"unknown asserter\"}")
-		log.Printf("%s DENIEDASSERT-UNKNOWN-ASSERTER %s ", hostname, qline)
+	err = mstore.Assert(fh64val,ph64val,assertstr)
+	if err != nil {
+		fmt.Fprintf(w, "{\"error\" : \"%s\"}",err.Error())
+		log.Printf("%s %s %s ", hostname, err.Error(), qline)
 		return
 	}
 
 	cmc <- CM{i: CAssertion, n: 1}
 	fmt.Fprintf(w, "%s", "{\"ok\" : \"query understood\"}")
 
-	m[fh64val] = assertstr
 	log.Printf("%s ASSERT %s by %s is %s", hostname, fh64val, ph64val, assertstr)
 
 }
@@ -175,8 +176,10 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "%s", "{\"error\" : \"this is not a SHA224 (28 byte) hash\"}")
 			log.Printf("%s BADQUERY-SHA224-SIZE %s ", hostname, r.URL.String()[3:])
 		} else {
-			assert, exists := m[hash64val]
-			if exists {
+
+			assert, err := mstore.Query(hash64val)
+
+			if err == nil {
 				cmc <- CM{i: CQueryGood, n: 1}
 				fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"asserted\" : \"", assert, "\"}")
 				log.Printf("%s QUERY %s ", hostname, r.URL.String()[3:])
@@ -237,9 +240,10 @@ func introHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rsa_pub_stored, exists := i[ph64val]
 
-	if exists {
+	rsa_pub_stored, err := mstore.Query(ph64val)
+
+	if err == nil {
 
 		lspi := strings.LastIndex(rsa_pub_stored, " ")
 		if lspi < 1 {
@@ -265,7 +269,13 @@ func introHandler(w http.ResponseWriter, r *http.Request) {
 		rsa_pub_name := strings.Trim(rsa_pub[lspi+1:], " \n")
 
 		cmc <- CM{i: CIntroduction, n: 1}
-		i[ph64val] = rsa_pub
+
+		err = mstore.Assert(ph64val,"INTRODUCING",rsa_pub)
+		if err != nil {
+			fmt.Fprintf(w, "{\"error\" : \"%s\"}",err.Error())
+			log.Printf("%s %s %s ", hostname, err.Error(), qline)
+			return
+		}
 
 		fmt.Fprintf(w, "%s%s%s", "{\"ok\" : \"success\",\"introduced\" : \"", rsa_pub_name, "\"}")
 		log.Printf("%s INTRO-NEW %s ", hostname, rsa_pub_name)
@@ -507,13 +517,12 @@ func cmrecord() {
 	}
 }
 
-var m map[string]string
-var i map[string]string
 
 func main() {
 
-	m = make(map[string]string)
-	i = make(map[string]string)
+	mstore = new(hashbase.LocalMapHashes)
+        mstore.Init()
+	mstore.Load(nil)
 
 	getHostname()
 	go housekeeping()
